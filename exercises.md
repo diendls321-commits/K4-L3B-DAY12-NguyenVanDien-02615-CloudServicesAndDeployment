@@ -91,7 +91,13 @@ phút đồng hồ (reset lúc giây 00), một người dùng có thể gửi t
 request trong 2 giây liên tiếp khi hạn mức là 10/phút? Giải thích cách đạt được
 con số đó.
 
-> *Câu trả lời của bạn*
+Người dùng có thể gửi tối đa **20 request trong 2 giây liên tiếp**.
+
+Cách đạt được:
+Với cơ chế đếm theo phút đồng hồ cố định (Fixed Window Counter), bộ đếm lượt gọi sẽ được reset về 0 vào giây thứ 00 của mỗi phút mới:
+- Ở giây `10:00:59` (1 giây cuối của phút thứ nhất), người dùng gửi dồn dập 10 request. Hệ thống ghi nhận 10/10 request hợp lệ.
+- Sang giây `10:01:00` (giây đầu tiên của phút thứ hai), đồng hồ bước sang phút mới nên bộ đếm tự động reset về 0. Người dùng gửi tiếp ngay 10 request nữa.
+Tổng cộng trong 2 giây (từ `10:00:59` đến `10:01:01`), người dùng đã gửi thành công 20 request mà không bị chặn, lưu lượng tăng đột biến gấp đôi hạn mức quy định. Cửa sổ trượt (Sliding Window) giải quyết triệt để lỗ hổng này vì nó luôn tính tổng request trong đúng 60 giây tính lùi từ thời điểm hiện tại.
 
 ---
 
@@ -100,7 +106,13 @@ con số đó.
 Hai cơ chế này khác nhau ở điểm nào? Cho một tình huống mà rate limit cho qua
 nhưng cost guard phải chặn, và một tình huống ngược lại.
 
-> *Câu trả lời của bạn*
+Khác biệt cốt lõi:
+- **Rate Limit (Tần suất):** Giới hạn *số lượng request* trong một cửa sổ thời gian ngắn (ví dụ: 10 request/phút) nhằm chống nghẽn mạng, chống DoS và đảm bảo tính sẵn sàng của hạ tầng server. Cơ chế này không quan tâm request đó tốn bao nhiêu token hay bao nhiêu tiền.
+- **Cost Guard (Tài chính):** Giới hạn *tổng chi phí tiền tệ* trong một chu kỳ dài (ví dụ: 10 USD/tháng) nhằm bảo vệ ngân sách của chủ dịch vụ trước chi phí API LLM. Cơ chế này tính toán dựa trên lượng token in/out thực tế quy đổi ra USD.
+
+Hai tình huống cụ thể:
+1. **Rate limit cho qua nhưng Cost guard chặn (HTTP 402):** Người dùng chỉ gửi 1 request trong phút (hoàn toàn hợp lệ theo rate limit 10 req/phút). Tuy nhiên, tổng chi tiêu trong tháng của người dùng này đã đạt 9.99 USD / 10.0 USD budget. Khi người dùng gửi thêm một prompt dài có chi phí ước tính làm tổng vượt quá 10.0 USD, Cost Guard sẽ lập tức chặn lại và trả về lỗi 402 Payment Required.
+2. **Cost guard cho qua nhưng Rate limit chặn (HTTP 429):** Vào đầu tháng, tài khoản người dùng còn nguyên 10.0 USD (chưa tiêu đồng nào). Người dùng chạy script bắn liên tiếp 15 request ngắn (mỗi request chỉ tốn 0.0001 USD, tổng 15 request mới chỉ mất 0.0015 USD - ngân sách còn hơn 9.99 USD). Cost Guard hoàn toàn đồng ý, nhưng từ request thứ 11 trở đi trong vòng 60 giây, Rate Limiter sẽ lập tức chặn lại và trả về mã lỗi 429 Too Many Requests để tránh làm quá tải server.
 
 ---
 
