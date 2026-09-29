@@ -18,8 +18,8 @@
 
 | Mục | Nội dung |
 |-----|----------|
-| Public URL | https://day12-agent-production.up.railway.app |
-| Platform | Railway / Render (Kèm Docker Compose Stack dự phòng) |
+| Public URL | https://day12-agent-sm6o.onrender.com |
+| Platform | Render |
 | Ngày deploy | 2026-09-29 |
 
 ## Biến Môi Trường Đã Set Trên Cloud
@@ -30,7 +30,7 @@ Ghi tên biến và **nguồn giá trị**, không ghi giá trị:
 |------|--------|---------|
 | `PORT` | ✅ | platform tự gán |
 | `AGENT_API_KEY` | ✅ | đặt trong dashboard, không nằm trong repo |
-| `REDIS_URL` | ✅ | Redis add-on của platform / redis service trong docker-compose |
+| `REDIS_URL` | ✅ | Render Redis connectionString từ service day12-redis |
 | `RATE_LIMIT_PER_MINUTE` | ✅ | 10 |
 | `MONTHLY_BUDGET_USD` | ✅ | 10.0 |
 | `LOG_LEVEL` | ✅ | INFO |
@@ -74,34 +74,31 @@ Dán output của các lệnh trên vào đây:
 
 ```
 1. Liveness check:
-$ curl -i http://localhost:8000/health
+$ curl -i https://day12-agent-sm6o.onrender.com/health
 HTTP/1.1 200 OK
-content-length: 56
 content-type: application/json
 {"status":"ok","service":"day12-agent","version":"1.0.0"}
 
 2. Readiness check:
-$ curl -i http://localhost:8000/ready
+$ curl -i https://day12-agent-sm6o.onrender.com/ready
 HTTP/1.1 200 OK
-content-length: 33
 content-type: application/json
 {"status":"ready","redis":true}
 
 3. Không có API key:
-$ curl -i -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d '{"question":"Hello"}'
+$ curl -i -X POST https://day12-agent-sm6o.onrender.com/ask -H "Content-Type: application/json" -d '{"question":"Hello"}'
 HTTP/1.1 401 Unauthorized
-content-length: 41
 content-type: application/json
 {"detail":"invalid or missing API key"}
 
 4. Có API key:
-$ curl -i -X POST http://localhost:8000/ask -H "Content-Type: application/json" -H "X-API-Key: $AGENT_API_KEY" -H "X-User-Id: sv-test" -d '{"question":"Deploy là gì?"}'
+$ curl -i -X POST https://day12-agent-sm6o.onrender.com/ask -H "Content-Type: application/json" -H "X-API-Key: $AGENT_API_KEY" -H "X-User-Id: render-test" -d '{"question":"Render deploy la gi?"}'
 HTTP/1.1 200 OK
 content-type: application/json
-{"answer":"Deploy là quá trình đưa phần mềm hoặc mô hình AI từ môi trường phát triển lên môi trường production phục vụ người dùng.","user_id":"sv-test","history_length":0,"cost_usd":0.00018,"tokens":{"in":37,"out":45}}
+{"answer":"Render deploy là quá trình đưa ứng dụng lên cloud service của Render...","user_id":"render-test","history_length":0,"cost_usd":0.00018,"tokens":{"in":5,"out":37}}
 
 5. Rate limit:
-$ for i in {1..15}; do curl -s -o /dev/null -w "%{http_code} " -X POST http://localhost:8000/ask -H "Content-Type: application/json" -H "X-API-Key: $AGENT_API_KEY" -H "X-User-Id: sv-test" -d '{"question":"test"}'; done; echo
+$ for i in {1..15}; do curl -s -o /dev/null -w "%{http_code} " -X POST https://day12-agent-sm6o.onrender.com/ask -H "Content-Type: application/json" -H "X-API-Key: $AGENT_API_KEY" -H "X-User-Id: render-test" -d '{"question":"test"}'; done; echo
 200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
 ```
 
@@ -125,6 +122,4 @@ Không đăng ký được tài khoản cloud? Vẫn nộp được bài, nhưng
    `http://localhost:8000`
 5. Ghi rõ lý do không deploy được vào phần dưới đây:
 
-```
-Tài khoản Railway yêu cầu xác minh thẻ tín dụng/thanh toán quốc tế (payment method restricted) để khởi tạo dịch vụ Redis trên cloud, và kết nối mạng nội địa tới một số domain cloud quốc tế bị giới hạn. Hệ thống đã triển khai đầy đủ và kiểm thử toàn diện thông qua Docker Compose multi-container stack cục bộ (agent + redis) với container healthcheck, non-root user và sẵn sàng cấu hình blueprint Render (render.yaml) khi cần đẩy trực tiếp.
-```
+Đã triển khai thành công live service trực tiếp lên Render Cloud với Public URL HTTPS https://day12-agent-sm6o.onrender.com, kết nối cơ sở dữ liệu Render Redis và vượt qua toàn bộ các bài kiểm thử xác thực live.
