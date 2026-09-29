@@ -285,4 +285,4 @@ Nộp **link repository** lên Codelab. Repo phải ở chế độ public.
 - [ ] `.env` **không** nằm trong repo (`git ls-files | grep .env` chỉ ra `.env.example`)
 - [ ] Không còn `NotImplementedError` nào trong `app/`
 - [ ] Có commit ở nhiều mốc thời gian, không phải một commit duy nhất
-- [ ] *(Bonus)* `.github/workflows/ci.yml` chạy xanh, README có badge `passing`
+- [ ] *(Bonus)* `.github/workflows/ci.yml` chạy xanh, README có badge `passing`.
