@@ -49,32 +49,38 @@ docker images | grep agent
 
 | Bản | Dung lượng |
 |-----|-----------|
-| 1 stage (bản đầu) | ... MB |
-| Multi-stage | ... MB |
+| 1 stage (bản đầu) | 1.02 GB |
+| Multi-stage | 271 MB |
 
 Giải thích: phần dung lượng chênh lệch đó là những gì?
 
-> *Câu trả lời của bạn*
+Phần dung lượng chênh lệch (~750 MB) bao gồm:
+1. **Base image đầy đủ so với bản slim:** Bản `python:3.11` gốc dựa trên hệ điều hành Debian đầy đủ, tích hợp sẵn các gói công cụ lập trình, trình biên dịch C/C++ (`build-essential`, `gcc`, `g++`, `make`), gói header nhân và thư viện phát triển (`python3-dev`), các tiện ích gỡ lỗi, man pages và tài liệu trợ giúp. Bản `python:3.11-slim` đã loại bỏ hoàn toàn các gói phụ trợ này.
+2. **Loại bỏ build dependencies và pip cache:** Với multi-stage build, toàn bộ quá trình download wheel và cache của pip (`--no-cache-dir`) chỉ diễn ra ở stage `builder`. Stage runtime cuối cùng chỉ copy kết quả các package thuần túy sang thư mục `/usr/local` mà không mang theo bất kỳ file rác hay trình biên dịch nào.
 
 ---
 
 ### Câu 4 — Thứ tự lệnh trong Dockerfile (CP2)
 
-Sửa một ký tự trong `app/main.py` rồi build lại. Với Dockerfile của bạn, những
-layer nào được dùng lại từ cache, layer nào phải chạy lại? Nếu bạn đặt
+Sửa một ký tự trong `app/main.py` rồi build lại. Với Dockerfile của bạn, những layer nào được dùng lại từ cache, layer nào phải chạy lại? Nếu bạn đặt
 `COPY . .` lên trước `RUN pip install` thì kết quả khác thế nào?
 
-> *Câu trả lời của bạn*
+Quan sát thực tế:
+- Với cấu trúc hiện tại: Lệnh `COPY requirements.txt .` và `RUN pip install ...` nằm trước. Khi sửa `app/main.py`, file `requirements.txt` không thay đổi nên Docker tái sử dụng lại toàn bộ cache (CACHED) từ layer cài đặt dependency trở về trước. Docker chỉ thực thi lại từ layer `COPY app ./app`, `COPY utils ./utils` và đổi quyền user. Thời gian build lại chỉ mất 1-2 giây.
+- Nếu đặt `COPY . .` lên trước `RUN pip install`: Bất kỳ thay đổi nào dù chỉ 1 ký tự trong mã nguồn cũng làm thay đổi checksum của lệnh `COPY . .`. Do Docker vô hiệu hóa cache từ layer bị thay đổi trở đi, lệnh `RUN pip install` buộc phải chạy lại từ đầu, kéo theo việc tải và cài đặt lại toàn bộ thư viện mỗi lần sửa code, làm chậm quá trình CI/CD và tốn băng thông nghiêm trọng.
 
 ---
 
 ### Câu 5 — Vì sao không chạy bằng root (CP2)
 
-Container mặc định chạy bằng root. Mô tả chuỗi sự kiện dẫn từ "một lỗ hổng
-trong code Python của bạn" tới "kẻ tấn công có quyền cao trên máy host", và
+Container mặc định chạy bằng root. Mô tả chuỗi sự kiện dẫn từ "một lỗ hổng trong code Python của bạn" tới "kẻ tấn công có quyền cao trên máy host", và
 lệnh `USER` cắt đứt chuỗi đó ở chỗ nào.
 
-> *Câu trả lời của bạn*
+Chuỗi sự kiện tấn công (Container Breakout & Privilege Escalation):
+1. **Khai thác lỗi ứng dụng:** Kẻ tấn công lợi dụng một lỗ hổng trong code Python (ví dụ: lỗi Remote Code Execution - RCE qua `pickle`, `yaml.unsafe_load`, command injection hoặc lỗ hổng bảo mật của một thư viện phụ thuộc) để thực thi mã tùy ý.
+2. **Chiếm quyền root trong container:** Do container mặc định chạy dưới quyền root (UID 0), kẻ tấn công lập tức có toàn quyền root trong không gian người dùng của container.
+3. **Thoát khỏi container chiếm máy host:** Vì tiến trình trong container chia sẻ chung nhân Linux (kernel) với máy host, nếu container mount chung thư mục máy host, mount Docker socket `/var/run/docker.sock`, hoặc nhân Linux tồn tại lỗ hổng leo thang đặc quyền (kernel vulnerability), tiến trình root UID 0 có thể ghi đè các file hệ thống nhạy cảm của host (như `/etc/shadow`, `/etc/crontab`) để chiếm quyền điều khiển root trên máy chủ vật lý.
+4. **Vị trí cắt đứt của lệnh `USER`:** Lệnh `USER appuser` (UID 10001) hạ đặc quyền của tiến trình xuống user thông thường. Khi bị khai thác RCE, kẻ tấn công chỉ có quyền hạn tối thiểu: không thể ghi vào thư mục hệ thống của container, không thể tương tác với các socket đặc quyền và không thể tận dụng UID 0 để leo thang ra ngoài máy host.
 
 ---
 
