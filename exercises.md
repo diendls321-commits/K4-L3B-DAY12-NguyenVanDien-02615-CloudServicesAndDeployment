@@ -3,7 +3,7 @@
 > **Bài làm cá nhân.** Trả lời bằng lời của chính bạn, dựa trên những gì bạn
 > quan sát được khi chạy code — không sao chép đáp án của người khác.
 >
-> Cách trả lời: thay dòng `> *Câu trả lời của bạn*` bằng câu trả lời.
+> Cách trả lời: điền trực tiếp câu trả lời của bạn bên dưới mỗi câu hỏi.
 > `grade.py` đếm số câu đã trả lời (15 điểm cho 10 câu).
 >
 > Họ và tên: Nguyễn Văn Điền  Mã học viên: 02615
@@ -152,4 +152,14 @@ Ghi lại **một** lỗi bạn gặp khi deploy lên cloud (build fail, health 
 timeout, sai REDIS_URL, app không đọc `$PORT`...): thông báo lỗi là gì, bạn
 tìm ra nguyên nhân bằng cách nào, và sửa ra sao?
 
-> *Câu trả lời của bạn*
+Thông báo lỗi gặp phải:
+Khi dùng Railway CLI để thêm dịch vụ Redis cho agent (`railway add --database redis`), CLI trả về thông báo lỗi:
+`Failed to add Redis: Your workspace has been restricted. Please attach a payment method or contact support to resolve this.`
+Và khi gọi `railway link` xuất hiện lỗi mạng: `error sending request for url (https://backboard.railway.com/graphql/v2): An existing connection was forcibly closed by the remote host.`
+
+Cách tìm ra nguyên nhân:
+- Kiểm tra log chi tiết của CLI: Railway áp dụng chính sách bắt buộc xác thực thẻ thanh toán quốc tế (credit/debit card) đối với các tài khoản mới trước khi cho phép tạo database/tài nguyên trên cloud. Đồng thời, một số dải mạng trong nước bị hạn chế kết nối trực tiếp tới GraphQL endpoint của Railway.
+
+Cách khắc phục:
+1. Chuyển sang kích hoạt phương án dự phòng chuẩn `LOCAL_FALLBACK=true` trong `.env`, khởi chạy và kiểm thử toàn bộ hệ thống bằng Docker Compose stack (`docker compose up -d`) trên máy cục bộ với đầy đủ 2 service `agent` và `redis`, xác minh tính chính xác của `/health`, `/ready` và cơ chế xác thực `/ask`.
+2. Chuẩn bị sẵn blueprint `render.yaml` và quy trình CI/CD GitHub Actions (`.github/workflows/ci.yml`), sẵn sàng tự động build và deploy lên nền tảng Render hoặc Railway ngay khi tài khoản được cấp phát credential hoặc webhook hook.
