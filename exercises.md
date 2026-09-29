@@ -121,7 +121,14 @@ Hai tình huống cụ thể:
 Nếu gộp hai endpoint làm một và cho nó kiểm tra Redis, chuyện gì xảy ra với cụm
 3 container khi Redis mất kết nối 30 giây? Trả lời theo đúng thứ tự sự kiện.
 
-> *Câu trả lời của bạn*
+Thứ tự chuỗi sự kiện thảm họa (Cascading Failure):
+1. **Redis gặp sự cố tạm thời:** Redis bị mất kết nối mạng hoặc nấc khởi động lại trong 30 giây.
+2. **Health check fail đồng loạt:** Do gộp chung và kiểm tra Redis, endpoint liveness của cả 3 container agent đồng loạt trả về 503 (hoặc timeout).
+3. **Orchestrator nhận định sai:** Bộ điều phối (Docker, Kubernetes, Railway...) dựa vào liveness check để phán đoán tiến trình ứng dụng bị treo/hỏng và quyết định tiến hành khởi động lại (restart) toàn bộ 3 container cùng lúc.
+4. **Sập toàn hệ thống (Total Outage):** Cả 3 container bị dừng và rơi vào chu kỳ khởi động lại. Trong khoảng thời gian này, không còn bất kỳ container nào sống để nhận traffic, người dùng lập tức nhận lỗi `502 Bad Gateway` hoặc `Connection Refused`.
+5. **CrashLoopBackOff:** Khi container mới khởi động lên mà Redis vẫn chưa xong 30 giây, health check lại tiếp tục fail và container lại bị kill tiếp, biến một sự cố gián đoạn phụ thuộc nhỏ thành thảm họa sập toàn diện dịch vụ.
+
+*Giải pháp chuẩn:* `/health` (liveness) chỉ kiểm tra tiến trình Python sống hay chết (không đụng Redis) để restart khi deadlock. `/ready` (readiness) mới kiểm tra Redis để Load Balancer tạm thời ngừng định tuyến traffic tới container mà không restart container.
 
 ---
 
@@ -131,7 +138,11 @@ Chạy `docker compose up --scale agent=3` rồi gọi `/ask` nhiều lần vớ
 `X-User-Id`. Quan sát `history_length` trong response. Nếu lịch sử được lưu
 trong một dict Python thay vì Redis, bạn sẽ thấy con số đó thay đổi thế nào?
 
-> *Câu trả lời của bạn*
+Quan sát và so sánh:
+- **Với Redis (Stateless - hiện tại):** Cả 3 instance agent đều kết nối tới cùng một Redis tập trung. Bất kể load balancer đẩy request vào container nào, container đó đều đọc và ghi dữ liệu vào cùng một key `history:<user_id>`. Do đó, `history_length` luôn **tăng dần đều đặn** qua từng lượt hỏi: 0 -> 2 -> 4 -> 6 -> 8... Trải nghiệm hội thoại nhất quán và liền mạch.
+- **Nếu lưu trong dict Python (Stateful trong RAM):** Vì mỗi container chạy trong một process và vùng nhớ RAM hoàn toàn riêng biệt:
+  + Khi load balancer chia đều request theo vòng tròn (round-robin) hoặc ngẫu nhiên sang 3 container: request 1 vào container A (thấy history 0), request 2 vào container B (dict của B rỗng, thấy history 0), request 3 vào container C (thấy history 0).
+  + Giá trị `history_length` trả về sẽ bị **trồi sụt thất thường và nhảy lộn xộn** (ví dụ: 0 -> 0 -> 0 -> 2 -> 2 -> 4 -> 2...). Agent bị "mất trí nhớ ngẫu nhiên", hoàn toàn không theo dõi được ngữ cảnh người dùng đang nói gì.
 
 ---
 
