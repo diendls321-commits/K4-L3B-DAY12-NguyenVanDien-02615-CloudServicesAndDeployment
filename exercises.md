@@ -6,7 +6,7 @@
 > Cách trả lời: thay dòng `> *Câu trả lời của bạn*` bằng câu trả lời.
 > `grade.py` đếm số câu đã trả lời (15 điểm cho 10 câu).
 >
-> Họ và tên: ..........................  Mã học viên: ..........................
+> Họ và tên: Nguyễn Văn Điền  Mã học viên: 02615
 
 ---
 
@@ -16,7 +16,9 @@ Trong `Settings`, `agent_api_key` không có giá trị mặc định nên app c
 khi khởi động nếu thiếu biến môi trường. Hãy mô tả một tình huống cụ thể mà
 việc "chết sớm" này cứu bạn, so với việc để mặc định `"changeme"`.
 
-> *Câu trả lời của bạn*
+Tình huống: Khi deploy ứng dụng lên môi trường Cloud (như Railway/Render/Kubernetes), nếu người triển khai quên thiết lập biến môi trường `AGENT_API_KEY`:
+- Nếu đặt mặc định là `"changeme"`: Service vẫn khởi động bình thường, healthcheck xanh và tiếp nhận traffic từ Internet. Các bot quét mạng hoặc kẻ xấu có thể dùng khóa mặc định này để gọi API LLM liên tục, gây tiêu tốn ngân sách hoặc xâm nhập tài nguyên. Khi đó lỗi âm thầm diễn ra và ta chỉ nhận biết khi nhìn thấy hóa đơn tiền triệu.
+- Nếu không có mặc định (Fail Fast): Pydantic ném `ValidationError` ngay lúc ứng dụng khởi động. Container dừng ngay lập tức tại bước deployment khiến quá trình rollout bị chặn đứng và báo lỗi rõ ràng trên log. Kỹ sư deploy nhìn thấy ngay lỗi thiếu khóa và sửa đổi trước khi bất kỳ request nào từ bên ngoài lọt vào.
 
 ---
 
@@ -26,7 +28,12 @@ Chạy service và gọi `/ask` vài lần. Dán một dòng log JSON bạn thu 
 nêu **hai** việc bạn làm được với dòng log đó mà `print("đã trả lời xong")`
 không làm được.
 
-> *Câu trả lời của bạn*
+Dòng log JSON thu được:
+`{"event": "ask_completed", "level": "info", "timestamp": "2026-09-29T10:05:00.000000+00:00", "user_id": "sv01", "tokens_in": 15, "tokens_out": 40, "cost_usd": 0.00015}`
+
+Hai việc làm được với dòng log này mà `print("đã trả lời xong")` không làm được:
+1. **Truy vấn, lọc và tổng hợp số liệu tự động (Log Aggregation & Metrics):** Các công cụ gom log tập trung (như Datadog, Grafana Loki, ELK, CloudWatch) có thể parse các trường JSON để chạy query thống kê chính xác, ví dụ: tính tổng `cost_usd` của từng `user_id` trong ngày, hay vẽ biểu đồ lượng token tiêu thụ theo thời gian thực mà không cần viết regex phức tạp.
+2. **Cảnh báo tự động dựa trên ngưỡng (Automated Alerting):** Có thể thiết lập quy tắc giám sát tự động để bắn thông báo ngay khi `level == "error"` hoặc phát hiện một request có chi phí `cost_usd > 0.05`. Với `print()`, log xuống dòng không có cấu trúc máy đọc, dễ vỡ khi gom log và không kích hoạt được rule cảnh báo chính xác.
 
 ---
 
